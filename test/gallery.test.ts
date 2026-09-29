@@ -80,3 +80,28 @@ describe("gallery text download", () => {
     expect(html).toMatch(/#dlBtn["']?\)\.hidden/);
   });
 });
+
+describe("gallery UI cleanup", () => {
+  it("hides the about footer in normal mode but keeps it visible in demo mode", async () => {
+    const html = await galleryHTML(env as Env);
+    // 正式版页脚隐藏（hidden 属性内联在 footer 开标签上）
+    expect(html).toContain('<footer id="aboutFooter" hidden');
+    // 登录页「了解 shotsync」链接不受影响
+    expect(html).toContain("了解 shotsync · 部署与使用教程");
+
+    const demoHtml = await galleryHTML({ ...(env as Env), DEMO_MODE: "1" });
+    // demo 演示站页脚可见（hidden 已被替换链摘除）
+    expect(demoHtml).toContain('<footer id="aboutFooter" style=');
+    expect(demoHtml).not.toContain('<footer id="aboutFooter" hidden');
+  });
+
+  it("renders text cards and viewer without the filename prefix", async () => {
+    const html = await galleryHTML(env as Env);
+    // 卡片与查看器不再拼文件名前缀行
+    expect(html).not.toContain('item.name + "\\n"');
+    expect(html).not.toContain('name + "\\n"');
+    // 下载命名链路仍依赖 dataset.name，必须保留
+    expect(html).toContain("el.dataset.name = item.name");
+    expect(html).toContain("currentName = (cell && cell.dataset.name) || null");
+  });
+});

@@ -76,7 +76,7 @@ export const galleryHTML = /* html */ `<!doctype html>
     <button id="cancelSelBtn" class="hidden" style="background:#444">取消</button>
   </header>
   <main id="grid"></main>
-  <footer style="padding:20px;text-align:center"><a href="/about" style="color:#9dbdff">关于 shotsync · 部署与使用教程</a></footer>
+  <footer id="aboutFooter" hidden style="padding:20px;text-align:center"><a href="/about" style="color:#9dbdff">关于 shotsync · 部署与使用教程</a></footer>
   <div id="toast"></div>
 
   <div id="compose" class="hidden">
@@ -205,10 +205,10 @@ async function openFull(id) {
       // one). Falls back to the bare body when the card is gone or has no
       // name, preserving pre-Task-4 behaviour for pasted notes.
       const cell = document.querySelector('#grid [data-id="' + id + '"]');
+      // 仅供下载命名（a.download），不再拼进预览/复制内容。
       currentName = (cell && cell.dataset.name) || null;
-      const name = currentName;
       const body = await res.text();
-      txt.textContent = (name ? name + "\\n" : "") + body;
+      txt.textContent = body;
       txt.classList.remove("hidden");
     } else {
       currentKind = "image";
@@ -383,9 +383,9 @@ function makeCell(item) {
     // /api/list now carries the preview, so the card renders its real text on
     // first paint. The "…" placeholder and the lazy fetch remain for items the
     // server did not inline (past MAX_INLINE_SNIPPETS, or a failed read).
-    // When the server also sent an original filename, prepend it so a wall of
-    // identical-looking text cells still says what each one is.
-    el.textContent = (item.name ? item.name + "\\n" : "") + (item.snippet || "…");
+    el.textContent = item.snippet || "…";
+    // 不再在卡片/查看器里拼文件名行（仅下载命名用），但 dataset.name 仍需
+    // 写入——openFull → currentName → a.download 的原始名链路依赖它。
     if (item.name) el.dataset.name = item.name;
   }
   el.onclick = () => { if (selectMode) toggleSelect(el); else openFull(item.id); };
@@ -564,4 +564,8 @@ async function enterDemo() {
 </body>
 </html>`;
 
-export const galleryDemoHTML = galleryHTML.replace("const DEMO = false", "const DEMO = true");
+// 正式版页脚隐藏（aboutFooter 带 hidden），demo 演示站替换后可见——与
+// const DEMO 的字符串替换同构。
+export const galleryDemoHTML = galleryHTML
+  .replace("const DEMO = false", "const DEMO = true")
+  .replace('<footer id="aboutFooter" hidden', '<footer id="aboutFooter"');
