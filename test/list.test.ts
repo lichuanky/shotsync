@@ -104,6 +104,16 @@ describe("handleList: inline text snippets", () => {
     expect(JSON.parse(raw).items.every((i: Record<string, unknown>) => !("key" in i))).toBe(true);
   });
 
+  it("carries the original filename from customMetadata", async () => {
+    const id = makeId(1_700_000_004_000, "n00004");
+    await (env as Env).BUCKET.put(fullKey(id, "txt"), new TextEncoder().encode("hello"), {
+      httpMetadata: { contentType: "text/plain" },
+      customMetadata: { hasThumb: "false", source: "pwa", uploadedAt: "x", origName: "笔记.md" },
+    });
+    const body = await (await handleList(listReq(), env as Env)).json<{ items: { name?: string; time?: number }[] }>();
+    expect(body.items.find(i => i.time === 1_700_000_004_000)!.name).toBe("笔记.md");
+  });
+
   it("inlines at most MAX_INLINE_SNIPPETS, leaving the rest for the client", async () => {
     // A pool that is all text must not turn one list call into `limit` reads.
     for (let i = 0; i < 25; i++) await seedText(1_700_000_100_000 + i * 1000, "line " + i);

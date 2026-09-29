@@ -34,6 +34,7 @@ export async function handleImage(request: Request, env: Env, id: string): Promi
     headers: {
       "content-type": obj.httpMetadata?.contentType || "application/octet-stream",
       "cache-control": "private, max-age=31536000, immutable",
+      "x-content-type-options": "nosniff",
     },
   });
 }

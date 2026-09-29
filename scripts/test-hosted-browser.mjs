@@ -177,18 +177,24 @@ try {
  await expect.poll(()=>page.locator('.tile img').evaluateAll(images=>images.length>0&&images.every(image=>image.complete&&image.naturalWidth>0))).toBe(true);
  const imageReads=previewRequests.length;
  await page.locator('#refresh').click();await expect(page.locator('#refresh')).toBeEnabled();expect(previewRequests.length).toBe(imageReads);
+ // A whitelisted text file uploads as text with its original name retained.
+ await page.locator('#file').setInputFiles({name:'笔记.md',mimeType:'text/markdown',buffer:Buffer.from('# 标题\n第一段')});
+ await expect(page.locator('.tile')).toHaveCount(3);
+ // 托管端预览仅显示文件内容（不显示文件名——与 gallery 端相反），文件名用于 aria-label / 下载。
+ await expect(page.locator('.tile-open[aria-label="打开 笔记.md"]')).toHaveCount(1);
+ await expect(page.locator('.tile-open[aria-label="打开 笔记.md"] .textpreview')).toHaveText('# 标题\n第一段');
  // Pasting into a composer edits text; it must never upload a clipboard image.
  await page.locator('#add-text').click();
  await page.locator('#text').evaluate((textarea,encoded)=>{const data=new DataTransfer();data.items.add(new File([Uint8Array.from(atob(encoded),c=>c.charCodeAt(0))],'should-not-upload.png',{type:'image/png'}));textarea.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));},png.toString('base64'));
- await page.locator('#close-composer').click();await page.locator('#refresh').click();await expect(page.locator('#refresh')).toBeEnabled();await expect(page.locator('.tile')).toHaveCount(2);
+ await page.locator('#close-composer').click();await page.locator('#refresh').click();await expect(page.locator('#refresh')).toBeEnabled();await expect(page.locator('.tile')).toHaveCount(3);
  // Browser clipboard event enters the same upload flow without clicking upload.
  await page.evaluate(encoded=>{const data=new DataTransfer();data.items.add(new File([Uint8Array.from(atob(encoded),c=>c.charCodeAt(0))],'粘贴截图.png',{type:'image/png'}));document.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));},png.toString('base64'));
- await expect(page.locator('.tile')).toHaveCount(3);
+ await expect(page.locator('.tile')).toHaveCount(4);
  await expect.poll(()=>page.locator('.tile img').evaluateAll(images=>images.length===2&&images.every(image=>image.complete&&image.naturalWidth>0))).toBe(true);
  // Another device uploads; refresh discovers it without downloading old previews.
  const remoteText='另一台设备的笔记';
  const externalUpload=await context.request.post(origin+'/api/upload',{headers:{Authorization:'Bearer '+lastAccessToken,Origin:origin},multipart:{full:{name:'remote.txt',mimeType:'text/plain',buffer:Buffer.from(remoteText)}}});expect(externalUpload.status()).toBe(200);
- const oldReads=[...previewRequests];await page.locator('#refresh').click();await expect(page.locator('.tile')).toHaveCount(4);await expect(page.locator('#gallery')).toContainText(remoteText);
+ const oldReads=[...previewRequests];await page.locator('#refresh').click();await expect(page.locator('.tile')).toHaveCount(5);await expect(page.locator('#gallery')).toContainText(remoteText);
  for(const path of new Set(oldReads))expect(previewRequests.filter(value=>value===path).length).toBe(oldReads.filter(value=>value===path).length);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:'/tmp/shotsync-sync-gallery-mobile.png',fullPage:true});
@@ -202,13 +208,13 @@ try {
  await page.locator('#add-text').click();await page.locator('#text').fill('迟到的旧提交');await page.locator('#text-form button').click();await composerPending;
  await page.locator('#close-composer').click();await page.locator('#add-text').click();await page.locator('#text').fill('不能丢失的新草稿');releaseComposer();
  await expect(page.locator('#text-form button')).toBeEnabled();await expect(page.locator('#composer-dialog')).toBeVisible();await expect(page.locator('#text')).toHaveValue('不能丢失的新草稿');await page.locator('#close-composer').click();
- await expect(page.locator('.tile')).toHaveCount(5);
+ await expect(page.locator('.tile')).toHaveCount(6);
  // Selection opens no viewer, cancelling is non-destructive, and a rejected confirmation sends no delete.
  await page.locator('#select-items').click();await page.locator('.tile-open').nth(0).click();await page.locator('.tile-open').nth(1).click();
  await expect(page.locator('#viewer-dialog')).not.toBeVisible();await expect(page.locator('.tile.selected')).toHaveCount(2);
  await expect(page.locator('.tile-open[aria-pressed="true"]')).toHaveCount(2);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
- await page.locator('#cancel-selection').click();await expect(page.locator('.tile.selected')).toHaveCount(0);await expect(page.locator('.tile')).toHaveCount(5);
+ await page.locator('#cancel-selection').click();await expect(page.locator('.tile.selected')).toHaveCount(0);await expect(page.locator('.tile')).toHaveCount(6);
  await page.locator('#select-items').click();await page.locator('.tile-open').nth(0).click();await page.locator('.tile-open').nth(1).click();
  let deleteRequests=0;const trackDelete=request=>{if(request.method()==='DELETE'&&new URL(request.url()).pathname.startsWith('/api/img/'))deleteRequests++;};page.on('request',trackDelete);
  page.once('dialog',dialog=>dialog.dismiss());await page.locator('#delete-selected').click();expect(deleteRequests).toBe(0);await expect(page.locator('.tile.selected')).toHaveCount(2);
@@ -216,9 +222,9 @@ try {
  let failedDelete=false;
  await page.route('**/api/img/*',async route=>{if(route.request().method()==='DELETE'&&!failedDelete){failedDelete=true;await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'fixture delete failure'})});}else await route.continue();});
  page.once('dialog',dialog=>dialog.accept());await page.locator('#delete-selected').click();
- await expect(page.locator('.tile')).toHaveCount(4);await expect(page.locator('.tile.selected')).toHaveCount(1);await expect(page.locator('#delete-selected')).toBeEnabled();
+ await expect(page.locator('.tile')).toHaveCount(5);await expect(page.locator('.tile.selected')).toHaveCount(1);await expect(page.locator('#delete-selected')).toBeEnabled();
  expect(deleteRequests).toBe(2);await page.unroute('**/api/img/*');
- page.once('dialog',dialog=>dialog.accept());await page.locator('#delete-selected').click();await expect(page.locator('.tile')).toHaveCount(3);
+ page.once('dialog',dialog=>dialog.accept());await page.locator('#delete-selected').click();await expect(page.locator('.tile')).toHaveCount(4);
  expect(deleteRequests).toBe(3);page.off('request',trackDelete);
  await expect(page.locator('#cancel-selection')).not.toBeVisible();await expect(page.locator('#select-items')).toBeVisible();
  page.on('dialog',dialog=>dialog.accept());

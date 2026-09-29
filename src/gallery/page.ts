@@ -1,4 +1,5 @@
 import { maskToken } from "./settings";
+import { isTextFileName, isTextMime, TEXT_ACCEPT_ATTR, TEXT_EXTENSIONS } from "../textfile";
 
 // The demo variant is derived once at module load (see the bottom of this file)
 // by flipping the DEMO const the inline script declares.
@@ -66,7 +67,7 @@ export const galleryHTML = /* html */ `<!doctype html>
 
   <header class="hidden" id="bar">
     <h1>shotsync</h1>
-    <input id="fileInput" type="file" accept="image/*" multiple class="hidden">
+    <input id="fileInput" type="file" accept="${TEXT_ACCEPT_ATTR}" multiple class="hidden">
     <button id="textBtn" style="background:#444">✎ 文字</button>
     <button id="uploadBtn">+ 图片</button>
     <button id="selectBtn" style="background:#444">选择</button>
@@ -114,6 +115,14 @@ export const galleryHTML = /* html */ `<!doctype html>
   </div>
 
 <script>
+// Inlined from ./textfile so the browser can use the same whitelist without a
+// bundler round-trip. Both must be injected — TEXT_EXTENSIONS powers the picker
+// accept attribute and isTextFileName drives the upload branching. Mask token
+// pattern below matches the same build-time toString() approach (see
+// hosted/ui.ts for the multi-line variant of this contract).
+const TEXT_EXTENSIONS = ${JSON.stringify(TEXT_EXTENSIONS)};
+const isTextFileName = ${isTextFileName.toString()};
+const isTextMime = ${isTextMime.toString()};
 const DEMO = false; // the DEMO_MODE worker serves this page with "true" (see index.ts)
 // Demo chrome switches to English for non-Chinese browsers (HN/Reddit visitors).
 // Normal pools are unaffected: DEMO_EN is always false when DEMO is false.
@@ -190,7 +199,14 @@ async function openFull(id) {
     const ct = res.headers.get("content-type") || "";
     if (ct.indexOf("text/") === 0) {
       currentKind = "text";
-      txt.textContent = await res.text();
+      const body = await res.text();
+      // openFull only takes an id, so pull the original filename from the
+      // matching card's dataset (written by makeCell when the list item had
+      // one). Falls back to the bare body when the card is gone or has no
+      // name, preserving pre-Task-4 behaviour for pasted notes.
+      const cell = document.querySelector('#grid [data-id="' + id + '"]');
+      const name = cell && cell.dataset.name;
+      txt.textContent = (name ? name + "\\n" : "") + body;
       txt.classList.remove("hidden");
     } else {
       currentKind = "image";
@@ -346,7 +362,10 @@ function makeCell(item) {
     // /api/list now carries the preview, so the card renders its real text on
     // first paint. The "…" placeholder and the lazy fetch remain for items the
     // server did not inline (past MAX_INLINE_SNIPPETS, or a failed read).
-    el.textContent = item.snippet || "…";
+    // When the server also sent an original filename, prepend it so a wall of
+    // identical-looking text cells still says what each one is.
+    el.textContent = (item.name ? item.name + "\\n" : "") + (item.snippet || "…");
+    if (item.name) el.dataset.name = item.name;
   }
   el.onclick = () => { if (selectMode) toggleSelect(el); else openFull(item.id); };
   // Nothing left to load for a text card that already has its snippet —
@@ -438,6 +457,15 @@ async function uploadOne(file) {
   return (await res.json()).id;
 }
 
+async function uploadTextFile(file) {
+  const text = await file.text();
+  const fd = new FormData();
+  fd.set("full", new Blob([text], { type: "text/plain" }), file.name || "file.txt");
+  const res = await fetch("/api/upload", { method: "POST", headers: { ...authHeaders(), "x-source": "pwa", "x-filename": file.name || "file.txt" }, body: fd });
+  if (!res.ok) throw new Error("upload failed");
+  return (await res.json()).id;
+}
+
 async function sendText(text) {
   if (!text.trim()) return false;
   const fd = new FormData();
@@ -455,7 +483,12 @@ function setupUpload() {
     input.value = "";
     let ok = 0;
     for (const f of files) {
-      try { await uploadOne(f); ok++; } catch { toast("有图上传失败"); }
+      try {
+        if (f.type.startsWith("image/")) { await uploadOne(f); }
+        else if (isTextFileName(f.name) || isTextMime(f.type)) { await uploadTextFile(f); }
+        else { throw new Error("unsupported"); }
+        ok++;
+      } catch { toast("有文件上传失败"); }
     }
     if (ok > 0) toast(ok === files.length ? "上传完成" : ok + "/" + files.length + " 上传成功");
     await poll();

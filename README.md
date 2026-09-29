@@ -52,7 +52,7 @@ The read-only demo contains public samples and does not accept uploads. Hosted c
 
 A single **Cloudflare Worker + R2 bucket** backing a small **PWA gallery**:
 
-- Upload **images** (auto-converted to JPEG + thumbnailed client-side) and **text** snippets.
+- Upload **images** (auto-converted to JPEG + thumbnailed client-side), **text** snippets, and **text files** (.txt/.md/.csv/.json/.xml/.yaml — read as plain text client-side).
 - View a newest-first feed on any device; tap to view full, **save/download**, or **delete**.
 - Mint a **signed, expiring public link** to share one item — without exposing the rest of the pool.
 - **Token-gated**: one shared secret unlocks the pool; everything else stays private.
@@ -147,6 +147,7 @@ The gallery shows every item newest-first and auto-refreshes every ~20 s, so any
 ### 2. Add things to the pool
 - **Image** — tap **`+ 图片`** (Add image): pick from photos or camera. It's converted to JPEG and thumbnailed in your browser, then uploaded.
 - **Text** — tap **`✎ 文字`** (Text), paste/type a snippet, then **`发送`** (Send). It becomes a text card — a cross-device clipboard.
+- **Text file** — use the same **`+ 图片`** (Add image) button (or drag it in): .txt/.md/.csv/.json/.xml/.yaml are shared as a text card, keeping the original file name.
 - **Mac screenshots, automatically** — install the [Mac menu-bar app](mac/README.md): every screenshot uploads on its own.
 - **iOS share sheet** — set up the [Shortcut](shortcut/README.md) to push an image from any app's share sheet.
 

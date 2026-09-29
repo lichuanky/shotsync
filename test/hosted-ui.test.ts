@@ -55,6 +55,11 @@ describe('hosted browser UI security and protocol', () => {
     expect(html).toContain("['register','reset'].includes(submittedMode)");
     expect(html).toContain("finally{if(needsCaptcha){captchaToken=''");
     expect(html).toContain('最多 50 次');
+    // Task 2: 托管前端支持文本文件上传
+    expect(html).toContain('isTextFileName');
+    expect(html).toContain('isTextMime');
+    expect(html).toContain('.md,.markdown,.csv,.json,.xml,.yaml,.yml');
+    expect(html).toContain('102400'); // 文本文件沿用 100 KiB 上限
   });
 
 });

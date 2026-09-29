@@ -37,6 +37,16 @@ describe("handleImage", () => {
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
   });
 
+  it("sets x-content-type-options: nosniff on image responses", async () => {
+    // 与托管端 download 对齐：阻止浏览器对文本上传后被解释为 HTML/JS 的 MIME 嗅探。
+    await put(fullKey("NOSNIFF", "png"), "image/png", [1, 2, 3]);
+    const res = await handleImage(req(), env as any, "NOSNIFF");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    // 消费 body 让 R2 stream 关闭，避免孤立存储栈无法弹出。
+    await res.arrayBuffer();
+  });
+
   it("serves thumb when size=thumb and thumb exists", async () => {
     await put(fullKey("ID", "png"), "image/png", [1, 2, 3]);
     await put(thumbKey("ID"), "image/jpeg", [9, 9]);

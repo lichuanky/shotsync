@@ -35,3 +35,29 @@ describe("gallery settings panel", () => {
     expect(html).toMatch(/\[[^\]]*"#settingsBtn"[^\]]*\]\.forEach/);
   });
 });
+
+describe("gallery text file upload", () => {
+  it("uploads text files through the same picker with the original filename", async () => {
+    const html = await galleryHTML(env as Env);
+    // accept 覆盖白名单文本扩展名
+    expect(html).toContain(".md,.markdown,.csv,.json,.xml,.yaml,.yml");
+    // 上传走 x-filename 头保留原始文件名（服务端 origName 已支持）
+    expect(html).toContain('"x-filename"');
+  });
+
+  it("inlines isTextMime so JSON/XML MIME-only uploads are accepted", async () => {
+    const html = await galleryHTML(env as Env);
+    // 与托管端对齐：浏览器对 .json/.xml 可能报 application/json 或 application/xml，
+    // 仅靠 f.type.startsWith("text/") 会漏判。内联函数应与 textfile.ts 同源。
+    expect(html).toContain("const isTextMime = function");
+  });
+});
+
+describe("gallery inline script integrity", () => {
+  it("emits a syntactically valid inline <script> (template escapes must survive)", async () => {
+    const html = await galleryHTML(env as Env);
+    const scripts = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+    expect(scripts.length).toBeGreaterThan(0);
+    for (const js of scripts) new Function(js); // 语法非法时抛错
+  });
+});
