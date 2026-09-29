@@ -69,7 +69,7 @@ async function upload(request: Request, env: HostedEnv, user: Account): Promise<
     await env.BUCKET.put(key(pending), full.stream(), { httpMetadata: { contentType: mime } });
     if (thumb) await env.BUCKET.put(key(pending, true), thumb.stream(), { httpMetadata: { contentType: 'image/jpeg' } });
     const committed = await env.DB.prepare(`UPDATE files SET state='ready',size=?,full_size=?,thumb_size=?,mime=?,name=?,expires_at=? WHERE id=? AND state='pending' AND expires_at>? RETURNING id`)
-      .bind(size, full.size, thumb?.size ?? 0, mime, full.name.slice(0, 200), expiresAt, id, Date.now()).first();
+      .bind(size, full.size, thumb?.size ?? 0, mime, (request.headers.get('x-filename') ?? full.name).slice(0, 200), expiresAt, id, Date.now()).first();
     if (!committed) throw new HttpError(409, '上传已过期，请重试');
     return json({ id, expiresAt: expiresAt || null });
   } catch (e) {

@@ -49,6 +49,7 @@ describe('hosted browser UI security and protocol', () => {
     const html = render();
     expect(html).toContain("body.append('full',file)");
     expect(html).toContain("body.append('full',new Blob([value],{type:'text/plain'}),'text.txt')");
+    expect(html).toContain("headers:{'x-filename':''}");
     for (const path of ['reset-password', '/api/account/me', '/api/account/devices', '/api/share/']) expect(html).toContain(path);
     expect(html).toContain("entry.preview.textContent=text");
     expect(html).toContain("limits.storedBytes||209715200");
@@ -60,6 +61,8 @@ describe('hosted browser UI security and protocol', () => {
     expect(html).toContain('isTextMime');
     expect(html).toContain('.md,.markdown,.csv,.json,.xml,.yaml,.yml');
     expect(html).toContain('102400'); // 文本文件沿用 100 KiB 上限
+    // Task 2: 文本下载回退文件名改用条目 ID（不再是固定 'text.txt'）
+    expect(html).toContain("?entry.item.id+'.txt'");
   });
 
 });

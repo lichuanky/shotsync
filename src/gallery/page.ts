@@ -107,6 +107,7 @@ export const galleryHTML = /* html */ `<!doctype html>
     <div style="display:flex;justify-content:flex-end;gap:10px;padding:10px">
       <button id="shareBtn" style="background:#0a8a5f">分享</button>
       <button id="saveBtn" style="background:#2b6cff">保存</button>
+      <button id="dlBtn" style="background:#0a8a5f" hidden>下载</button>
       <button id="delBtn" style="background:#d23">删除</button>
       <button id="closeBtn" style="background:#444">关闭</button>
     </div>
@@ -185,7 +186,7 @@ $("#logoutBtn").onclick = () => {
 // Task 10-12 implementation:
 
 // Full viewer: shows an image or a text item, with delete + save/copy
-let currentId = null, currentKind = "image";
+let currentId = null, currentKind = "image", currentName = null;
 
 async function openFull(id) {
   currentId = id;
@@ -199,17 +200,19 @@ async function openFull(id) {
     const ct = res.headers.get("content-type") || "";
     if (ct.indexOf("text/") === 0) {
       currentKind = "text";
-      const body = await res.text();
       // openFull only takes an id, so pull the original filename from the
       // matching card's dataset (written by makeCell when the list item had
       // one). Falls back to the bare body when the card is gone or has no
       // name, preserving pre-Task-4 behaviour for pasted notes.
       const cell = document.querySelector('#grid [data-id="' + id + '"]');
-      const name = cell && cell.dataset.name;
+      currentName = (cell && cell.dataset.name) || null;
+      const name = currentName;
+      const body = await res.text();
       txt.textContent = (name ? name + "\\n" : "") + body;
       txt.classList.remove("hidden");
     } else {
       currentKind = "image";
+      currentName = null;
       const url = URL.createObjectURL(await res.blob());
       img.addEventListener("load", () => URL.revokeObjectURL(url), { once: true });
       img.src = url; img.classList.remove("hidden");
@@ -217,6 +220,7 @@ async function openFull(id) {
     $("#saveBtn").textContent = currentKind === "text"
       ? (DEMO_EN ? "Copy" : "复制")
       : (DEMO_EN ? "Save" : "保存");
+    $("#dlBtn").hidden = currentKind !== "text";
   } catch {}
 }
 
@@ -268,6 +272,23 @@ document.querySelector("#saveBtn").onclick = async () => {
   } catch (e) {
     if (e && e.name !== "AbortError") toast(DEMO_EN ? "Save failed" : "保存失败"); // ignore user-cancelled share
   }
+};
+
+// Download the current text item as a file. Original filename (from upload)
+// when present, otherwise <id>.txt for pasted notes. Plain anchor download —
+// Android clipboards cannot hold very long text, so download is the escape hatch.
+document.querySelector("#dlBtn").onclick = async () => {
+  if (!currentId || currentKind !== "text") return;
+  try {
+    const res = await fetch("/i/" + currentId + "?size=full", { headers: authHeaders() });
+    if (!res.ok) { toast(DEMO_EN ? "Download failed" : "下载失败"); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = currentName || (currentId + ".txt");
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch { toast(DEMO_EN ? "Download failed" : "下载失败"); }
 };
 
 document.querySelector("#delBtn").onclick = async () => {
@@ -513,7 +534,7 @@ if ("serviceWorker" in navigator) {
 // Read-only demo pool: offer the hosted service and self-hosting without enabling writes.
 async function enterDemo() {
   showApp();
-  ["#uploadBtn", "#textBtn", "#selectBtn", "#settingsBtn", "#shareBtn", "#delBtn"].forEach((s) => $(s).classList.add("hidden"));
+  ["#uploadBtn", "#textBtn", "#selectBtn", "#settingsBtn", "#shareBtn", "#dlBtn", "#delBtn"].forEach((s) => $(s).classList.add("hidden"));
   if (DEMO_EN) document.documentElement.lang = "en";
   $("#bar h1").textContent = DEMO_EN ? "shotsync · read-only demo" : "shotsync · 只读演示池";
   $("#closeBtn").textContent = DEMO_EN ? "Close" : "关闭";

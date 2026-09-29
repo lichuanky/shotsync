@@ -61,3 +61,22 @@ describe("gallery inline script integrity", () => {
     for (const js of scripts) new Function(js); // 语法非法时抛错
   });
 });
+
+describe("gallery text download", () => {
+  it("shows a dedicated download button for text items with original-name fallback", async () => {
+    const html = await galleryHTML(env as Env);
+    // 查看器有独立下载按钮
+    expect(html).toContain('id="dlBtn"');
+    // 下载用 anchor.download 显式指定文件名（原始名优先，回退 <id>.txt）
+    expect(html).toContain(".download =");
+    expect(html).toContain("currentName || (currentId");
+  });
+
+  it("exposes the current item filename and toggles the button per kind", async () => {
+    const html = await galleryHTML(env as Env);
+    // 状态变量记录当前文件名
+    expect(html).toContain("currentName =");
+    // openFull 内根据类型显隐下载按钮
+    expect(html).toMatch(/#dlBtn["']?\)\.hidden/);
+  });
+});

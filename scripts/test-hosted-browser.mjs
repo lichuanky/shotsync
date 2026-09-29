@@ -137,7 +137,7 @@ try {
  await page.locator('.tile-open').click();await expect(page.locator('#viewer-content')).toContainText('跨设备取回测试');
  await context.grantPermissions(['clipboard-read','clipboard-write']);
  await page.locator('#viewer-copy').click();expect(await page.evaluate(()=>navigator.clipboard.readText())).toBe('跨设备取回测试');
- const downloadEvent=page.waitForEvent('download');await page.locator('#viewer-download').click();expect((await downloadEvent).suggestedFilename()).toBe('text.txt');
+ const downloadEvent=page.waitForEvent('download');await page.locator('#viewer-download').click();const dlName=(await downloadEvent).suggestedFilename();expect(dlName.endsWith('.txt')).toBe(true);expect(dlName).not.toBe('text.txt');
  await page.locator('#close-viewer').click();
  await page.locator('#open-settings').click();
  const createdDeviceResponse=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname==='/api/account/devices');
@@ -183,6 +183,10 @@ try {
  // 托管端预览仅显示文件内容（不显示文件名——与 gallery 端相反），文件名用于 aria-label / 下载。
  await expect(page.locator('.tile-open[aria-label="打开 笔记.md"]')).toHaveCount(1);
  await expect(page.locator('.tile-open[aria-label="打开 笔记.md"] .textpreview')).toHaveText('# 标题\n第一段');
+ // 托管端下载使用条目原始名（文本文件上传时 FormData 携带的 name）。
+ await page.locator('.tile-open[aria-label="打开 笔记.md"]').click();await expect(page.locator('#viewer-content')).toContainText('# 标题');
+ const mdDownload=page.waitForEvent('download');await page.locator('#viewer-download').click();expect((await mdDownload).suggestedFilename()).toBe('笔记.md');
+ await page.locator('#close-viewer').click();
  // Pasting into a composer edits text; it must never upload a clipboard image.
  await page.locator('#add-text').click();
  await page.locator('#text').evaluate((textarea,encoded)=>{const data=new DataTransfer();data.items.add(new File([Uint8Array.from(atob(encoded),c=>c.charCodeAt(0))],'should-not-upload.png',{type:'image/png'}));textarea.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));},png.toString('base64'));
