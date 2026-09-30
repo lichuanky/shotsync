@@ -79,6 +79,41 @@ describe("gallery text download", () => {
     // openFull 内根据类型显隐下载按钮
     expect(html).toMatch(/#dlBtn["']?\)\.hidden/);
   });
+
+  it("names image downloads with the original filename, falling back to <id>.<ext>", async () => {
+    const html = await galleryHTML(env as Env);
+    // saveBtn 图片分支与 dlBtn 文本分支同链路：原始名优先，回退 <id>.<ext>
+    expect(html).toContain('currentName || (currentId + "." + ext)');
+    // openFull 的文本/图片两个分支都从卡片恢复原始名（声明行不算）
+    const restores = html.match(/currentName = \(cell && cell\.dataset\.name\) \|\| null/g) || [];
+    expect(restores.length).toBe(2);
+  });
+
+  it("reuses the viewer's cached blob so share/download fires within user activation", async () => {
+    const html = await galleryHTML(env as Env);
+    // openFull 图片分支缓存 blob，saveBtn 优先复用（不再每次点击都 await fetch，
+    // 避免 Android 上 fetch 耗尽 user activation 导致 Web Share 面板转圈挂起）
+    expect(html).toContain("currentBlob = blob");
+    expect(html).toContain("let blob = currentBlob");
+    expect(html).toContain("currentBlob = null");
+  });
+
+  it("keeps blob URLs alive long enough for slow download starts (no 1s revoke)", async () => {
+    const html = await galleryHTML(env as Env);
+    // Windows Chrome/Edge 启动下载是异步的：1s 即撤销 blob URL 会与下载启动
+    // 竞态，浏览器报「无法下载 - 网络问题」。revoke 必须延迟到 30s 量级。
+    expect(html).not.toContain("revokeObjectURL(url), 1000");
+    const longRevokes = html.match(/revokeObjectURL\(url\), 30000\)/g) || [];
+    expect(longRevokes.length).toBe(2); // saveBtn 图片分支 + dlBtn 文本分支
+  });
+
+  it("uses Web Share only on mobile; PC downloads via anchor like text files", async () => {
+    const html = await galleryHTML(env as Env);
+    // Windows 桌面 canShare({files}) 为 true 但系统分享面板保存文件不可靠
+    //（闪退/无响应）。仅移动端走 Web Share，PC 一律 anchor 下载（与 dlBtn 同路）。
+    expect(html).toContain("const isMobile =");
+    expect(html).toContain("if (isMobile && navigator.canShare");
+  });
 });
 
 describe("gallery UI cleanup", () => {

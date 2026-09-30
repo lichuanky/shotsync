@@ -186,7 +186,7 @@ $("#logoutBtn").onclick = () => {
 // Task 10-12 implementation:
 
 // Full viewer: shows an image or a text item, with delete + save/copy
-let currentId = null, currentKind = "image", currentName = null;
+let currentId = null, currentKind = "image", currentName = null, currentBlob = null;
 
 async function openFull(id) {
   currentId = id;
@@ -212,8 +212,15 @@ async function openFull(id) {
       txt.classList.remove("hidden");
     } else {
       currentKind = "image";
-      currentName = null;
-      const url = URL.createObjectURL(await res.blob());
+      // 图片下载命名与文本分支同链路：原始名优先，回退 <id>.<ext>
+      const cell = document.querySelector('#grid [data-id="' + id + '"]');
+      currentName = (cell && cell.dataset.name) || null;
+      // 缓存全尺寸 blob 供 saveBtn 复用：点「保存」时不再二次 fetch——
+      // Android 的 Web Share 要求 user activation 有效期（约 5s）内调用，
+      // 点击后再 await 网络请求会耗尽 activation，分享面板转圈挂起。
+      const blob = await res.blob();
+      currentBlob = blob;
+      const url = URL.createObjectURL(blob);
       img.addEventListener("load", () => URL.revokeObjectURL(url), { once: true });
       img.src = url; img.classList.remove("hidden");
     }
@@ -255,22 +262,35 @@ document.querySelector("#saveBtn").onclick = async () => {
     return;
   }
   try {
-    const res = await fetch("/i/" + currentId + "?size=full", { headers: authHeaders() });
-    if (!res.ok) { toast(DEMO_EN ? "Save failed" : "保存失败"); return; }
-    const blob = await res.blob();
+    // 优先复用 openFull 缓存的 blob（无网络等待，保住 user activation）；
+    // 缓存为空（如刷新后直开）才回退到现场 fetch。
+    let blob = currentBlob;
+    if (!blob) {
+      const res = await fetch("/i/" + currentId + "?size=full", { headers: authHeaders() });
+      if (!res.ok) { toast(DEMO_EN ? "Save failed" : "保存失败"); return; }
+      blob = await res.blob();
+    }
     const ext = (blob.type.split("/")[1] || "jpg").replace("jpeg", "jpg");
-    const file = new File([blob], currentId + "." + ext, { type: blob.type || "image/jpeg" });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    const file = new File([blob], currentName || (currentId + "." + ext), { type: blob.type || "image/jpeg" });
+    // 仅移动端走 Web Share（保存到相册/转发）。Windows 桌面的 canShare({files})
+    // 也为 true，但其系统分享面板保存文件不可靠（闪退/无响应）——PC 一律
+    // anchor 下载，与 dlBtn 文本下载同路。
+    const isMobile = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+    if (isMobile && navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({ files: [file] });
     } else {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url; a.download = file.name;
       document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      // Windows Chrome/Edge 启动下载是异步的（保存对话框/杀软扫描都会拖慢），
+      // 过早 revoke 会与下载启动竞态 → 「无法下载 - 网络问题」。延迟到 30s。
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
     }
   } catch (e) {
     if (e && e.name !== "AbortError") toast(DEMO_EN ? "Save failed" : "保存失败"); // ignore user-cancelled share
+  } finally {
+    currentBlob = null;
   }
 };
 
@@ -287,7 +307,7 @@ document.querySelector("#dlBtn").onclick = async () => {
     const a = document.createElement("a");
     a.href = url; a.download = currentName || (currentId + ".txt");
     document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
   } catch { toast(DEMO_EN ? "Download failed" : "下载失败"); }
 };
 
@@ -378,15 +398,15 @@ function makeCell(item) {
   const el = document.createElement(isText ? "div" : "img");
   el.dataset.id = item.id;
   el.dataset.kind = isText ? "text" : "image";
+  // 原始文件名仅供下载命名（openFull → currentName → a.download / share），
+  // 文本与图片卡片都需要。
+  if (item.name) el.dataset.name = item.name;
   if (isText) {
     el.className = "txtcell";
     // /api/list now carries the preview, so the card renders its real text on
     // first paint. The "…" placeholder and the lazy fetch remain for items the
     // server did not inline (past MAX_INLINE_SNIPPETS, or a failed read).
     el.textContent = item.snippet || "…";
-    // 不再在卡片/查看器里拼文件名行（仅下载命名用），但 dataset.name 仍需
-    // 写入——openFull → currentName → a.download 的原始名链路依赖它。
-    if (item.name) el.dataset.name = item.name;
   }
   el.onclick = () => { if (selectMode) toggleSelect(el); else openFull(item.id); };
   // Nothing left to load for a text card that already has its snippet —

@@ -36,14 +36,17 @@ export default {
 
     if (pathname === "/" && m === "GET") {
       // On the demo deployment, flip the frontend into read-only demo chrome.
+      // no-store：HTML 外壳内联全部前端逻辑，禁止任何缓存——否则发版后客户端
+      // 会继续跑旧 JS（PWA/启发式缓存下尤其顽固），修复看起来"不生效"。
       const html = env.DEMO_MODE === "1" ? galleryDemoHTML : galleryHTML;
-      return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
+      return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
     }
     if (pathname === "/manifest.webmanifest" && m === "GET") {
-      return new Response(manifestJSON, { headers: { "content-type": "application/manifest+json" } });
+      return new Response(manifestJSON, { headers: { "content-type": "application/manifest+json", "cache-control": "no-store" } });
     }
     if (pathname === "/sw.js" && m === "GET") {
-      return new Response(swJS, { headers: { "content-type": "text/javascript" } });
+      // no-store：SW 脚本必须每次校验最新版，旧 SW 会拦截导航请求拖住旧壳。
+      return new Response(swJS, { headers: { "content-type": "text/javascript", "cache-control": "no-store" } });
     }
     if (pathname === "/api/upload") {
       return m === "POST" ? handleUpload(request, env) : err(405, "method not allowed");
