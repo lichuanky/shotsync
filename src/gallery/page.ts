@@ -493,7 +493,10 @@ async function uploadOne(file) {
   const fd = new FormData();
   fd.set("full", full, "u.jpg");
   fd.set("thumb", thumb, "t.jpg");
-  const res = await fetch("/api/upload", { method: "POST", headers: { ...authHeaders(), "x-source": "pwa" }, body: fd });
+  // x-filename 携带原始文件名（服务端存 origName）：图片经转码后 FormData
+  // 名只是占位（u.jpg），没有这个头下载时就只能回退 <id>.jpg。浏览器 fetch
+  // 请求头不允许非 ISO-8859-1 字符，中文名必须 encodeURIComponent。
+  const res = await fetch("/api/upload", { method: "POST", headers: { ...authHeaders(), "x-source": "pwa", "x-filename": encodeURIComponent(file.name || "u.jpg") }, body: fd });
   if (!res.ok) throw new Error("upload failed");
   return (await res.json()).id;
 }
@@ -502,7 +505,7 @@ async function uploadTextFile(file) {
   const text = await file.text();
   const fd = new FormData();
   fd.set("full", new Blob([text], { type: "text/plain" }), file.name || "file.txt");
-  const res = await fetch("/api/upload", { method: "POST", headers: { ...authHeaders(), "x-source": "pwa", "x-filename": file.name || "file.txt" }, body: fd });
+  const res = await fetch("/api/upload", { method: "POST", headers: { ...authHeaders(), "x-source": "pwa", "x-filename": encodeURIComponent(file.name || "file.txt") }, body: fd });
   if (!res.ok) throw new Error("upload failed");
   return (await res.json()).id;
 }

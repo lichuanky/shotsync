@@ -8,13 +8,14 @@ declare global {
   interface ProvidedEnv extends Env {}
 }
 
-function uploadReq(opts: { token?: string; full?: Blob; thumb?: Blob; source?: string }): Request {
+function uploadReq(opts: { token?: string; full?: Blob; thumb?: Blob; source?: string; filename?: string }): Request {
   const fd = new FormData();
   if (opts.full) fd.set("full", opts.full, "shot.png");
   if (opts.thumb) fd.set("thumb", opts.thumb, "shot.jpg");
   const headers: Record<string, string> = {};
   if (opts.token) headers["authorization"] = `Bearer ${opts.token}`;
   if (opts.source) headers["x-source"] = opts.source;
+  if (opts.filename) headers["x-filename"] = opts.filename;
   return new Request("https://x/api/upload", { method: "POST", headers, body: fd });
 }
 
@@ -61,5 +62,30 @@ describe("handleUpload", () => {
     expect(full!.customMetadata?.hasThumb).toBe("true");
     // Consume the stream to avoid cleanup issues
     await full!.body?.cancel();
+  });
+
+  it("decodes percent-encoded x-filename (PWA sends encodeURIComponent for non-ASCII names)", async () => {
+    const encoded = encodeURIComponent("网页截图_测试.png");
+    const res = await handleUpload(uploadReq({ token: "test-token", full: png(), filename: encoded }), env as Env);
+    const { id } = await res.json<{ id: string }>();
+    const obj = await (env as Env).BUCKET.get(`full/${id}.png`);
+    expect(obj!.customMetadata?.origName).toBe("网页截图_测试.png");
+    await obj!.body?.cancel();
+  });
+
+  it("keeps plain-ASCII x-filename as-is (curl/CLI path)", async () => {
+    const res = await handleUpload(uploadReq({ token: "test-token", full: png(), filename: "Screenshot_1.png" }), env as Env);
+    const { id } = await res.json<{ id: string }>();
+    const obj = await (env as Env).BUCKET.get(`full/${id}.png`);
+    expect(obj!.customMetadata?.origName).toBe("Screenshot_1.png");
+    await obj!.body?.cancel();
+  });
+
+  it("falls back to form filename when x-filename is absent", async () => {
+    const res = await handleUpload(uploadReq({ token: "test-token", full: png() }), env as Env);
+    const { id } = await res.json<{ id: string }>();
+    const obj = await (env as Env).BUCKET.get(`full/${id}.png`);
+    expect(obj!.customMetadata?.origName).toBe("shot.png");
+    await obj!.body?.cancel();
   });
 });

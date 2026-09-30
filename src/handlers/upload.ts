@@ -4,6 +4,14 @@ import { EXT_BY_TYPE, fullKey, makeId, randSuffix, thumbKey } from "../ids";
 
 const MAX_FULL_BYTES = 25 * 1024 * 1024;
 
+function safeDecode(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
 export async function handleUpload(request: Request, env: Env): Promise<Response> {
   if (!isAuthed(request, env)) return err(401, "unauthorized");
 
@@ -33,9 +41,16 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
   const hasThumb = !!(thumbEntry && typeof thumbEntry === "object" && "stream" in thumbEntry && "name" in thumbEntry);
 
   const id = makeId(Date.now(), randSuffix());
+  // x-filename 由 PWA 端 encodeURIComponent 编码（浏览器 fetch 请求头不允许
+  // 非 ISO-8859-1 字符，中文名会直接抛错）。仅当值形如合法百分号编码时解码，
+  // 纯 ASCII 原名（curl/CLI 直发）原样保留；解码失败（含裸 % 等）同样原样回退。
+  const rawName = request.headers.get("x-filename") || "";
+  const origName = /^[%A-Za-z0-9\-_.~]*$/.test(rawName) && /%[0-9A-Fa-f]{2}/.test(rawName)
+    ? safeDecode(rawName)
+    : rawName || full.name || "";
   const meta = {
     source: request.headers.get("x-source") || "unknown",
-    origName: request.headers.get("x-filename") || full.name || "",
+    origName,
     uploadedAt: new Date().toISOString(),
     hasThumb: String(hasThumb),
   };

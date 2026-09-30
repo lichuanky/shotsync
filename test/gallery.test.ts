@@ -114,6 +114,13 @@ describe("gallery text download", () => {
     expect(html).toContain("const isMobile =");
     expect(html).toContain("if (isMobile && navigator.canShare");
   });
+
+  it("sends x-filename on image uploads so downloads keep the original name", async () => {
+    const html = await galleryHTML(env as Env);
+    // uploadOne（图片）此前固定 u.jpg 占位名且不发 x-filename，原始名在
+    // 服务端丢失 → 下载回退 <id>.jpg。与 uploadTextFile 同构补上该头。
+    expect(html).toMatch(/uploadOne[\s\S]{0,1200}"x-filename"/);
+  });
 });
 
 describe("gallery UI cleanup", () => {

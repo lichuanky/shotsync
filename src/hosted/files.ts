@@ -12,6 +12,13 @@ export async function hashToken(token: string): Promise<string> {
   return Array.from(new Uint8Array(hash), n => n.toString(16).padStart(2, '0')).join('');
 }
 function randomToken() { return Array.from(crypto.getRandomValues(new Uint8Array(32)), n => n.toString(16).padStart(2, '0')).join(''); }
+// x-filename 由 PWA 端 encodeURIComponent 编码（浏览器 fetch 请求头不允许
+// 非 ISO-8859-1 字符）。仅当值形如合法百分号编码时解码，纯 ASCII 原样保留。
+function decodeXFilename(s: string): string {
+  return /^[%A-Za-z0-9\-_.~]*$/.test(s) && /%[0-9A-Fa-f]{2}/.test(s)
+    ? (() => { try { return decodeURIComponent(s); } catch { return s; } })()
+    : s;
+}
 function quotaError(e: unknown): never {
   if (String(e).includes('quota:')) throw new HttpError(429, '已达到账号或服务额度，请稍后重试；可删除旧文件释放存储空间');
   throw e;
@@ -69,7 +76,7 @@ async function upload(request: Request, env: HostedEnv, user: Account): Promise<
     await env.BUCKET.put(key(pending), full.stream(), { httpMetadata: { contentType: mime } });
     if (thumb) await env.BUCKET.put(key(pending, true), thumb.stream(), { httpMetadata: { contentType: 'image/jpeg' } });
     const committed = await env.DB.prepare(`UPDATE files SET state='ready',size=?,full_size=?,thumb_size=?,mime=?,name=?,expires_at=? WHERE id=? AND state='pending' AND expires_at>? RETURNING id`)
-      .bind(size, full.size, thumb?.size ?? 0, mime, (request.headers.get('x-filename') ?? full.name).slice(0, 200), expiresAt, id, Date.now()).first();
+      .bind(size, full.size, thumb?.size ?? 0, mime, decodeXFilename(request.headers.get('x-filename') ?? full.name).slice(0, 200), expiresAt, id, Date.now()).first();
     if (!committed) throw new HttpError(409, '上传已过期，请重试');
     return json({ id, expiresAt: expiresAt || null });
   } catch (e) {
